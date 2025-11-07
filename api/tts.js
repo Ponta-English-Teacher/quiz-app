@@ -1,6 +1,22 @@
 // api/tts.js — Vercel Serverless Function (Node 18+)
 export default async function handler(req, res) {
   try {
+    // Health check (GET)
+    if (req.method === 'GET') {
+      const REGION = process.env.AZURE_TTS_REGION || '';
+      const hasKey = Boolean(process.env.AZURE_TTS_KEY);
+      res.status(200).json({
+        ok: true,
+        hasKey,
+        region: REGION,
+        defaultVoices: {
+          en: process.env.AZURE_TTS_DEFAULT_VOICE_EN || 'en-GB-LibbyNeural',
+          ja: process.env.AZURE_TTS_DEFAULT_VOICE_JA || 'ja-JP-NanamiNeural'
+        }
+      });
+      return;
+    }
+
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method Not Allowed' });
       return;
@@ -21,12 +37,10 @@ export default async function handler(req, res) {
       return;
     }
 
-    // Choose a voice
     const defaultEn = process.env.AZURE_TTS_DEFAULT_VOICE_EN || 'en-GB-LibbyNeural';
     const defaultJa = process.env.AZURE_TTS_DEFAULT_VOICE_JA || 'ja-JP-NanamiNeural';
     const selectedVoice = lang === 'ja' ? defaultJa : (voice || defaultEn);
 
-    // Build SSML
     const ssml = `
 <speak version="1.0" xml:lang="${lang}">
   <voice name="${selectedVoice}">
@@ -34,14 +48,13 @@ export default async function handler(req, res) {
   </voice>
 </speak>`.trim();
 
-    // Synthesize
     const synthUrl = `${ENDPOINT}/cognitiveservices/v1`;
     const r = await fetch(synthUrl, {
       method: 'POST',
       headers: {
         'Ocp-Apim-Subscription-Key': KEY,
         'Content-Type': 'application/ssml+xml',
-        'X-Microsoft-OutputFormat': 'audio-16khz-128kbitrate-mono-mp3',
+        'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
         'User-Agent': 'quiz-app-vercel'
       },
       body: ssml
@@ -70,7 +83,6 @@ function escapeXml(s) {
 }
 
 async function readJson(req) {
-  // Vercel provides request body already parsed in some runtimes, but be safe:
   if (req.body && typeof req.body === 'object') return req.body;
   const chunks = [];
   for await (const c of req) chunks.push(c);
